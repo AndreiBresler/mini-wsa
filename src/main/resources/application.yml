@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: mini-wsa
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/miniwsa}
+    username: ${SPRING_DATASOURCE_USERNAME:miniwsa}
+    password: ${SPRING_DATASOURCE_PASSWORD:miniwsa}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2s
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: mini-wsa-ingestion
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.akamai.miniwsa.domain
+        spring.json.value.default.type: com.akamai.miniwsa.domain.SecurityEvent
+    listener:
+      ack-mode: manual
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+miniwsa:
+  kafka:
+    topic: security-events
+  enrichment:
+    repeat-offender-window-seconds: 600
+    repeat-offender-threshold: 5
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.akamai.miniwsa: INFO
+    org.springframework.kafka: WARN
