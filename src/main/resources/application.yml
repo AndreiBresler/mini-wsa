@@ -1,6 +1,9 @@
 spring:
   application:
     name: mini-wsa
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/miniwsa}
     username: ${SPRING_DATASOURCE_USERNAME:miniwsa}
@@ -34,6 +37,7 @@ spring:
         spring.json.value.default.type: com.akamai.miniwsa.domain.SecurityEvent
     listener:
       ack-mode: manual
+      concurrency: 3
   jackson:
     serialization:
       write-dates-as-timestamps: false

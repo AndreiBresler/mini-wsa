@@ -31,6 +31,8 @@ services:
     image: apache/kafka:3.9.1
     container_name: mini-wsa-kafka
     ports:
+      # Host port 9092 -> container 29092 (PLAINTEXT_HOST listener).
+      # The internal PLAINTEXT listener (kafka:9092) is reachable only inside the compose network.
       - "9092:29092"
     environment:
       KAFKA_NODE_ID: 1
