@@ -15,9 +15,8 @@ This is a take-home assignment for Akamai. The candidate must understand and own
 ## Do not
 
 ✗ Introduce frameworks not already in `pom.xml` without discussing the trade-off first
-✗ Add Lombok — records cover the use cases
+✗ Add Lombok — records cover non-entity use cases; JPA entities use explicit getters/setters
 ✗ Add R2DBC, Reactor, WebFlux — synchronous JDBC + JDK 21 virtual threads is the design
-✗ Add JPA / Hibernate — `NamedParameterJdbcTemplate` is the design
 ✗ Add an OpenAPI / Swagger code generator — curl examples in README are sufficient
 ✗ Commit code that does not compile (`mvn compile` must pass before commit)
 ✗ Commit tests that don't assert behavior (no `assertTrue(true)`, no commented-out assertions)
@@ -36,7 +35,8 @@ This is a take-home assignment for Akamai. The candidate must understand and own
 - **Constants at the top of the file** for any string that appears in more than one place or has external meaning (route paths, topic names, redis key prefixes, header names).
 - **No `Optional` in domain records** as field types; use nullable fields. `Optional` belongs in return types of repository methods.
 - **No `static` mutable state** anywhere outside `*Test` classes.
-- **`@Transactional`** only on the service layer, never on controllers or repositories.
+- **`@Transactional`** on service classes or persistence facades. Never on controllers; never on Spring Data interfaces (Spring Data manages its own transactions).
+- **JPA via Spring Data.** `@Entity` classes live under `storage/`. Lombok is not used; getters/setters are explicit. Analytical aggregations use `@Query` JPQL constructor expressions returning record projections. Repositories are wrapped in facade classes (e.g. `EventRepository`, `StatsRepository`) so services depend on domain records, not on JPA. Avoid database-specific JPQL/SQL; isolate any vendor-specific snippet in one facade method with a comment.
 
 ## Test conventions
 

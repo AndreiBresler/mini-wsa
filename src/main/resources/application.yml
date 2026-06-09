@@ -11,6 +11,16 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+    show-sql: false
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
@@ -48,6 +58,9 @@ miniwsa:
   enrichment:
     repeat-offender-window-seconds: 600
     repeat-offender-threshold: 5
+    repeat-offender-grace-seconds: 60
+  stats:
+    top-limit: 10
 
 server:
   port: 8080

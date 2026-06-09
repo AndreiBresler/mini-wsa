@@ -20,15 +20,15 @@ import java.util.UUID;
  *
  * <p>The sliding-window semantic comes from ZREMRANGEBYSCORE evicting members
  * older than {@code now - window}. The Redis key TTL is a janitor only, so
- * keys for quiet IPs eventually disappear. {@link #GRACE_PERIOD} extends the
- * TTL slightly past the window edge to avoid the key expiring mid-pipeline.
+ * keys for quiet IPs eventually disappear. The grace period extends the TTL
+ * slightly past the window edge so a slow event near the boundary doesn't
+ * see a missing key.
  */
 @Component
 public class RepeatOffenderTracker {
 
     private static final Logger log = LoggerFactory.getLogger(RepeatOffenderTracker.class);
     private static final String KEY_PREFIX = "wsa:ip:";
-    private static final Duration GRACE_PERIOD = Duration.ofSeconds(60);
 
     private final StringRedisTemplate redis;
     private final Duration window;
@@ -38,10 +38,11 @@ public class RepeatOffenderTracker {
     public RepeatOffenderTracker(
             StringRedisTemplate redis,
             @Value("${miniwsa.enrichment.repeat-offender-window-seconds}") long windowSeconds,
-            @Value("${miniwsa.enrichment.repeat-offender-threshold}") int threshold) {
+            @Value("${miniwsa.enrichment.repeat-offender-threshold}") int threshold,
+            @Value("${miniwsa.enrichment.repeat-offender-grace-seconds}") long graceSeconds) {
         this.redis = redis;
         this.window = Duration.ofSeconds(windowSeconds);
-        this.keyTtl = this.window.plus(GRACE_PERIOD);
+        this.keyTtl = this.window.plus(Duration.ofSeconds(graceSeconds));
         this.threshold = threshold;
     }
 

@@ -136,7 +136,19 @@ Repeat offender ⟺ ZCARD > threshold.
 
 ### Schema (events table)
 
-Single flat table. Nested JSON (`rule`, `geoLocation`) is flattened into prefixed columns for index-friendliness. See `V1__create_events_table.sql`.
+Single flat table managed by Flyway (`V1__create_events_table.sql`). Nested JSON (`rule`, `geoLocation`) is flattened into prefixed columns for index-friendliness.
+
+### ORM layer
+
+JPA via Spring Data, Hibernate underneath. The boundary is deliberate:
+
+- `EventEntity` — JPA `@Entity`, mutable, getters/setters explicit (no Lombok per AGENT.md)
+- `EventJpaRepository extends JpaRepository<EventEntity, Long>` — CRUD + `existsByEventId`
+- `EventRepository` (facade) — translates between `EnrichedEvent` (immutable domain record) and `EventEntity`; carries `@Transactional`
+- `StatsJpaRepository` — JPQL `@Query` aggregations returning record projections via constructor expressions
+- `StatsRepository` (facade) — maps projections to response DTOs; rounds avg threat score to 2 decimals in Java (kept out of the query so JPQL stays portable)
+
+Hibernate runs in **`ddl-auto: validate` mode** — Flyway owns schema changes; Hibernate only checks that the entity maps to the migration. This keeps the source of truth (migrations) explicit.
 
 ### Index strategy
 
@@ -152,12 +164,24 @@ Single flat table. Nested JSON (`rule`, `geoLocation`) is flattened into prefixe
 
 ### Idempotent upsert
 
-```sql
-INSERT INTO events (...) VALUES (...)
-ON CONFLICT (event_id) DO NOTHING;
+The authoritative idempotency guarantee is the `UNIQUE(event_id)` constraint in `events`. Code in `EventRepository.upsert`:
+
+```
+try {
+    jpa.save(toEntity(event));
+    return true;
+} catch (DataIntegrityViolationException duplicate) {
+    return false;
+}
 ```
 
-`DO NOTHING` (not `DO UPDATE`) because enriched events are immutable — a redelivered message represents the same logical event and we don't need to mutate the stored row. This avoids the cost of an UPDATE (touching the row, generating WAL) when we're going to throw the result away anyway.
+Three layers reinforce the guarantee:
+
+1. **Kafka partitioning by `clientIp`.** Same client → same partition → same consumer thread → sequential processing. The realistic redelivery case (consumer crashes between save and ack) is therefore not a race.
+2. **Manual ack only after `save()` returns.** Throw before ack → Kafka redelivers → second attempt hits the unique constraint → returns `false`.
+3. **`DataIntegrityViolationException` catch.** Handles the (rare, operator-error) case where the same `eventId` is published with two different `clientIp`s and lands on two partitions concurrently. The DB catches it; this catch keeps it from logging as an error.
+
+No `@Transactional` on `upsert`: Spring Data's `JpaRepository.save` opens its own transaction, so a unique-violation rollback is local to that call and doesn't poison a wider transactional scope (which would otherwise trigger `UnexpectedRollbackException` at commit).
 
 ### Batch insert
 

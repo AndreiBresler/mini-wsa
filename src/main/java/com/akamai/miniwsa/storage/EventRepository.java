@@ -2,74 +2,88 @@ package com.akamai.miniwsa.storage;
 
 import com.akamai.miniwsa.domain.EnrichedEvent;
 import com.akamai.miniwsa.domain.GeoLocation;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import com.akamai.miniwsa.domain.Rule;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-
+/**
+ * Facade over {@link EventJpaRepository}. Maps the immutable
+ * {@link EnrichedEvent} domain record to the mutable {@link EventEntity}
+ * JPA bean. Services depend on this facade, never on JPA types directly.
+ *
+ * <h2>Idempotency model</h2>
+ *
+ * <p>The authoritative idempotency guarantee is the {@code UNIQUE(event_id)}
+ * constraint in the database. Three layers reinforce it:
+ *
+ * <ol>
+ *   <li><b>Kafka partitioning by {@code clientIp}.</b> Same client (and
+ *       therefore same {@code eventId}) routes to the same partition,
+ *       which is serviced by a single consumer thread. Redelivery after
+ *       a consumer crash is sequential, not concurrent.
+ *   <li><b>Manual ack only after a successful save.</b> If the save throws,
+ *       the offset is not committed and Kafka redelivers; the redelivered
+ *       attempt sees the unique-constraint violation and returns false.
+ *   <li><b>{@code DataIntegrityViolationException} catch.</b> Cross-partition
+ *       eventId collisions (operator error, not normal operation) are
+ *       handled here without raising a noisy stack trace upstream.
+ * </ol>
+ *
+ * <p>No {@code @Transactional} on this method: Spring Data's
+ * {@code JpaRepository.save} runs in its own transaction, so a constraint
+ * violation rolls back that transaction without leaving a rollback-only
+ * marker on a wider scope.
+ */
 @Repository
 public class EventRepository {
 
-    private static final String UPSERT_SQL = """
-            INSERT INTO events (
-                event_id, timestamp, received_at, config_id, policy_id,
-                client_ip, hostname, path, method, status_code, user_agent,
-                rule_id, rule_name, rule_message, rule_severity, rule_category,
-                action, geo_country, geo_city, request_size, response_size,
-                attack_type, threat_score
-            ) VALUES (
-                :event_id, :timestamp, :received_at, :config_id, :policy_id,
-                :client_ip, :hostname, :path, :method, :status_code, :user_agent,
-                :rule_id, :rule_name, :rule_message, :rule_severity, :rule_category,
-                :action, :geo_country, :geo_city, :request_size, :response_size,
-                :attack_type, :threat_score
-            )
-            ON CONFLICT (event_id) DO NOTHING
-            """;
+    private final EventJpaRepository jpa;
 
-    private final NamedParameterJdbcTemplate jdbc;
-
-    public EventRepository(NamedParameterJdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public EventRepository(EventJpaRepository jpa) {
+        this.jpa = jpa;
     }
 
     /**
-     * Idempotent insert of an enriched event.
-     * Returns {@code true} if a row was inserted, {@code false} if the event_id already existed.
+     * Persists the enriched event. Returns {@code true} if inserted,
+     * {@code false} if an event with this {@code eventId} already exists.
      */
-    public boolean upsert(EnrichedEvent e) {
-        GeoLocation geo = e.geoLocation();
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("event_id", e.eventId())
-                .addValue("timestamp", toOffsetDateTime(e.timestamp()))
-                .addValue("received_at", toOffsetDateTime(e.receivedAt()))
-                .addValue("config_id", e.configId())
-                .addValue("policy_id", e.policyId())
-                .addValue("client_ip", e.clientIp())
-                .addValue("hostname", e.hostname())
-                .addValue("path", e.path())
-                .addValue("method", e.method())
-                .addValue("status_code", e.statusCode())
-                .addValue("user_agent", e.userAgent())
-                .addValue("rule_id", e.rule().id())
-                .addValue("rule_name", e.rule().name())
-                .addValue("rule_message", e.rule().message())
-                .addValue("rule_severity", e.rule().severity().name())
-                .addValue("rule_category", e.rule().category().name())
-                .addValue("action", e.action().name())
-                .addValue("geo_country", geo == null ? null : geo.country())
-                .addValue("geo_city", geo == null ? null : geo.city())
-                .addValue("request_size", e.requestSize())
-                .addValue("response_size", e.responseSize())
-                .addValue("attack_type", e.attackType())
-                .addValue("threat_score", e.threatScore());
-
-        return jdbc.update(UPSERT_SQL, params) > 0;
+    public boolean upsert(EnrichedEvent event) {
+        try {
+            jpa.save(toEntity(event));
+            return true;
+        } catch (DataIntegrityViolationException duplicate) {
+            return false;
+        }
     }
 
-    private static OffsetDateTime toOffsetDateTime(java.time.Instant instant) {
-        return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
+    private static EventEntity toEntity(EnrichedEvent e) {
+        Rule rule = e.rule();
+        GeoLocation geo = e.geoLocation();
+
+        EventEntity entity = new EventEntity();
+        entity.setEventId(e.eventId());
+        entity.setTimestamp(e.timestamp());
+        entity.setReceivedAt(e.receivedAt());
+        entity.setConfigId(e.configId());
+        entity.setPolicyId(e.policyId());
+        entity.setClientIp(e.clientIp());
+        entity.setHostname(e.hostname());
+        entity.setPath(e.path());
+        entity.setMethod(e.method());
+        entity.setStatusCode(e.statusCode());
+        entity.setUserAgent(e.userAgent());
+        entity.setRuleId(rule.id());
+        entity.setRuleName(rule.name());
+        entity.setRuleMessage(rule.message());
+        entity.setRuleSeverity(rule.severity());
+        entity.setRuleCategory(rule.category());
+        entity.setAction(e.action());
+        entity.setGeoCountry(geo == null ? null : geo.country());
+        entity.setGeoCity(geo == null ? null : geo.city());
+        entity.setRequestSize(e.requestSize());
+        entity.setResponseSize(e.responseSize());
+        entity.setAttackType(e.attackType());
+        entity.setThreatScore(e.threatScore());
+        return entity;
     }
 }
