@@ -1,0 +1,62 @@
+[
+    {
+      "eventId": "aaaa-0001",
+      "configId": "cfg-001",
+      "clientIp": "10.0.0.1",
+      "timestamp": "2026-06-09T18:00:00Z",
+      "severity": "HIGH",
+      "action": "DENY",
+      "category": "INJECTION",
+      "ruleName": "sql-injection-basic",
+      "requestPath": "/api/users",
+      "geoLocation": { "country": "RU", "city": "Moscow" }
+    },
+    {
+      "eventId": "aaaa-0002",
+      "configId": "cfg-001",
+      "clientIp": "10.0.0.2",
+      "timestamp": "2026-06-09T18:01:00Z",
+      "severity": "MEDIUM",
+      "action": "DENY",
+      "category": "XSS",
+      "ruleName": "xss-reflected",
+      "requestPath": "/search",
+      "geoLocation": { "country": "CN", "city": "Beijing" }
+    },
+    {
+      "eventId": "aaaa-0003",
+      "configId": "cfg-001",
+      "clientIp": "10.0.0.1",
+      "timestamp": "2026-06-09T18:02:00Z",
+      "severity": "HIGH",
+      "action": "DENY",
+      "category": "INJECTION",
+      "ruleName": "sql-injection-basic",
+      "requestPath": "/api/users",
+      "geoLocation": { "country": "RU", "city": "Moscow" }
+    },
+    {
+      "eventId": "aaaa-0004",
+      "configId": "cfg-002",
+      "clientIp": "10.0.0.3",
+      "timestamp": "2026-06-09T18:03:00Z",
+      "severity": "LOW",
+      "action": "MONITOR",
+      "category": "SCANNER",
+      "ruleName": "port-scan",
+      "requestPath": "/admin",
+      "geoLocation": { "country": "US", "city": "Ashburn" }
+    },
+    {
+      "eventId": "aaaa-0005",
+      "configId": "cfg-001",
+      "clientIp": "10.0.0.1",
+      "timestamp": "2026-06-09T18:04:00Z",
+      "severity": "HIGH",
+      "action": "DENY",
+      "category": "INJECTION",
+      "ruleName": "sql-injection-basic",
+      "requestPath": "/api/orders",
+      "geoLocation": { "country": "RU", "city": "Moscow" }
+    }
+  ]
