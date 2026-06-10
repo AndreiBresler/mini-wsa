@@ -19,6 +19,11 @@ import java.util.List;
  */
 final class EventSpecifications {
 
+    private static final String FIELD_CONFIG_ID    = "configId";
+    private static final String FIELD_TIMESTAMP    = "timestamp";
+    private static final String FIELD_RULE_CATEGORY = "ruleCategory";
+    private static final String FIELD_ACTION       = "action";
+
     private EventSpecifications() {
     }
 
@@ -27,19 +32,19 @@ final class EventSpecifications {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>(5);
             if (configId != null) {
-                predicates.add(cb.equal(root.get("configId"), configId));
+                predicates.add(cb.equal(root.get(FIELD_CONFIG_ID), configId));
             }
             if (from != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("timestamp"), from));
+                predicates.add(cb.greaterThanOrEqualTo(root.get(FIELD_TIMESTAMP), from));
             }
             if (to != null) {
-                predicates.add(cb.lessThan(root.get("timestamp"), to));
+                predicates.add(cb.lessThan(root.get(FIELD_TIMESTAMP), to));
             }
             if (category != null) {
-                predicates.add(cb.equal(root.get("ruleCategory"), category));
+                predicates.add(cb.equal(root.get(FIELD_RULE_CATEGORY), category));
             }
             if (action != null) {
-                predicates.add(cb.equal(root.get("action"), action));
+                predicates.add(cb.equal(root.get(FIELD_ACTION), action));
             }
             return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
         };
