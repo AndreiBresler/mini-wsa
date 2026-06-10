@@ -6,6 +6,7 @@ import com.akamai.miniwsa.enrichment.EnrichmentService;
 import com.akamai.miniwsa.storage.EventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 
 @Component
+@Profile({"consumer", "all"})
 public class EventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(EventConsumer.class);

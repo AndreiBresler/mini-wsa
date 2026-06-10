@@ -7,12 +7,14 @@ import com.akamai.miniwsa.storage.EventRepository;
 import com.akamai.miniwsa.storage.EventRepository.SamplesResult;
 import com.akamai.miniwsa.storage.OffsetPageable;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 
 @Service
+@Profile({"query", "all"})
 public class SamplesService {
 
     private static final String TIMESTAMP_FIELD = "timestamp";

@@ -2,11 +2,13 @@ package com.akamai.miniwsa.enrichment;
 
 import com.akamai.miniwsa.domain.EnrichedEvent;
 import com.akamai.miniwsa.domain.SecurityEvent;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 
 @Service
+@Profile({"consumer", "all"})
 public class EnrichmentService {
 
     private final RepeatOffenderTracker tracker;

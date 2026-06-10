@@ -1,5 +1,6 @@
 package com.akamai.miniwsa.api;
 
+import com.akamai.miniwsa.generator.ScenarioLibrary.UnknownScenarioException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -53,6 +54,12 @@ public class GlobalExceptionHandler {
         Object value = ex.getValue();
         return badRequest("Invalid query parameter",
                 List.of(new FieldError(field, "invalid value: " + value)));
+    }
+
+    @ExceptionHandler(UnknownScenarioException.class)
+    public ResponseEntity<ApiError> handleUnknownScenario(UnknownScenarioException ex) {
+        return badRequest("Unknown scenario",
+                List.of(new FieldError("scenario", ex.getMessage())));
     }
 
     private ResponseEntity<ApiError> badRequest(String error, List<FieldError> details) {

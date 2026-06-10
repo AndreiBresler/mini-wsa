@@ -5,7 +5,7 @@ import com.akamai.miniwsa.domain.Category;
 import com.akamai.miniwsa.domain.EnrichedEvent;
 import com.akamai.miniwsa.domain.GeoLocation;
 import com.akamai.miniwsa.domain.Rule;
-import jakarta.persistence.criteria.Predicate;
+import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,7 +13,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -21,21 +20,11 @@ import java.util.List;
  * {@link EnrichedEvent} domain record and the mutable {@link EventEntity}
  * JPA bean. Services depend on this facade, never on JPA types directly.
  *
- * <p>Dynamic filtering for {@code findSamples} is built with a JPA
- * {@link Specification} so the WHERE clause contains only the predicates
- * the caller supplied. The earlier {@code :param IS NULL OR e.field = :param}
- * pattern fails on Postgres for several JDBC types because Postgres cannot
- * infer the data type of a parameter that appears only inside {@code IS NULL}.
- *
- * <p>See LLD for the idempotency model around {@link #upsert}.
+ * <p>See class-level documentation in the LLD for the idempotency model.
  */
 @Repository
+@Profile({"consumer", "query", "all"})
 public class EventRepository {
-
-    private static final String FIELD_CONFIG_ID = "configId";
-    private static final String FIELD_TIMESTAMP = "timestamp";
-    private static final String FIELD_RULE_CATEGORY = "ruleCategory";
-    private static final String FIELD_ACTION = "action";
 
     private final EventJpaRepository jpa;
 
@@ -52,9 +41,14 @@ public class EventRepository {
         }
     }
 
+    /**
+     * Paginated, filtered samples. All filter parameters are optional —
+     * {@code null} means "do not filter on this column". Pagination and
+     * sort are driven by the supplied {@link Pageable}.
+     */
     public SamplesResult findSamples(Integer configId, Instant from, Instant to,
                                      Category category, Action action, Pageable pageable) {
-        Specification<EventEntity> spec = buildSamplesSpecification(configId, from, to, category, action);
+        Specification<EventEntity> spec = EventSpecifications.samples(configId, from, to, category, action);
         Page<EventEntity> page = jpa.findAll(spec, pageable);
         List<EnrichedEvent> samples = page.getContent().stream()
                 .map(EventRepository::toDomain)
@@ -63,29 +57,6 @@ public class EventRepository {
     }
 
     public record SamplesResult(long totalCount, List<EnrichedEvent> samples) {
-    }
-
-    private static Specification<EventEntity> buildSamplesSpecification(
-            Integer configId, Instant from, Instant to, Category category, Action action) {
-        return (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (configId != null) {
-                predicates.add(cb.equal(root.get(FIELD_CONFIG_ID), configId));
-            }
-            if (from != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.<Instant>get(FIELD_TIMESTAMP), from));
-            }
-            if (to != null) {
-                predicates.add(cb.lessThan(root.<Instant>get(FIELD_TIMESTAMP), to));
-            }
-            if (category != null) {
-                predicates.add(cb.equal(root.get(FIELD_RULE_CATEGORY), category));
-            }
-            if (action != null) {
-                predicates.add(cb.equal(root.get(FIELD_ACTION), action));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
     }
 
     private static EventEntity toEntity(EnrichedEvent e) {
@@ -126,9 +97,10 @@ public class EventRepository {
                 ? null
                 : new GeoLocation(e.getGeoCountry(), e.getGeoCity());
         return new EnrichedEvent(
-                e.getEventId(), e.getTimestamp(), e.getReceivedAt(), e.getConfigId(),
-                e.getPolicyId(), e.getClientIp(), e.getHostname(), e.getPath(),
-                e.getMethod(), e.getStatusCode(), e.getUserAgent(),
+                e.getEventId(), e.getTimestamp(), e.getReceivedAt(),
+                e.getConfigId(), e.getPolicyId(), e.getClientIp(),
+                e.getHostname(), e.getPath(), e.getMethod(),
+                e.getStatusCode(), e.getUserAgent(),
                 rule, e.getAction(), geo,
                 e.getRequestSize(), e.getResponseSize(),
                 e.getAttackType(), e.getThreatScore()

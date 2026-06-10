@@ -1,6 +1,17 @@
 spring:
   application:
     name: mini-wsa
+  profiles:
+    # When SPRING_PROFILES_ACTIVE is not set, activate 'all' — every tier
+    # (ingest, consumer, query, dev) runs in a single JVM. This is the
+    # default for `docker compose up` and local development.
+    #
+    # In production each tier runs as its own deployment off this same JAR:
+    #   SPRING_PROFILES_ACTIVE=ingest    → REST + Kafka producer only
+    #   SPRING_PROFILES_ACTIVE=consumer  → Kafka consumer + enrichment only
+    #   SPRING_PROFILES_ACTIVE=query     → /v1/stats, /v1/events/samples only
+    # 'dev' is the generator endpoints; gate behind the dev profile in prod.
+    default: all
   threads:
     virtual:
       enabled: true
@@ -63,6 +74,10 @@ miniwsa:
     top-limit: 10
   samples:
     max-limit: 100
+  generator:
+    max-count: 10000
+    scenarios-file: classpath:generator-scenarios.yml
+    ingest-url: http://localhost:8080
 
 server:
   port: 8080

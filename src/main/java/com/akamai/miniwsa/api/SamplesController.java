@@ -3,6 +3,7 @@ package com.akamai.miniwsa.api;
 import com.akamai.miniwsa.api.dto.SamplesResponse;
 import com.akamai.miniwsa.domain.Action;
 import com.akamai.miniwsa.domain.Category;
+import org.springframework.context.annotation.Profile;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 
 @RestController
+@Profile({"query", "all"})
 @RequestMapping(SamplesController.BASE_PATH)
 public class SamplesController {
 

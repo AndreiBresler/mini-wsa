@@ -1,0 +1,52 @@
+scenarios:
+  - name: quiet-bot-day
+    description: "Baseline traffic, no attack waves. Demonstrates the unmolested distribution."
+    count: 500
+    windowHours: 24
+    waves: []
+
+  - name: single-targeted-attack
+    description: "One sustained INJECTION wave from a single bad actor on /api/v1/login. Repeat-offender bonus fires."
+    count: 200
+    windowHours: 6
+    waves:
+      - size: 15
+        durationSeconds: 30
+        category: INJECTION
+        targetPath: /api/v1/login
+        severityProfile: ESCALATING
+
+  - name: multi-vector-incident
+    description: "Three coordinated waves (INJECTION, XSS, DATA_LEAKAGE) plus background traffic."
+    count: 1000
+    windowHours: 12
+    defaultBatching: true
+    defaultBatchSize: 100
+    waves:
+      - size: 12
+        durationSeconds: 45
+        category: INJECTION
+        targetPath: /api/v1/login
+        severityProfile: ESCALATING
+      - size: 8
+        durationSeconds: 20
+        category: XSS
+        severityProfile: HIGH
+      - size: 20
+        durationSeconds: 60
+        category: DATA_LEAKAGE
+        targetPath: /api/admin/dump
+        severityProfile: CRITICAL
+
+  - name: slow-burn
+    description: "Low-rate wave (20 events spread across 8 minutes). Edge case: size > threshold but rate is just inside the 10-minute window."
+    count: 2000
+    windowHours: 24
+    defaultBatching: true
+    defaultBatchSize: 100
+    waves:
+      - size: 20
+        durationSeconds: 480
+        category: INJECTION
+        targetPath: /api/v1/login
+        severityProfile: MIXED

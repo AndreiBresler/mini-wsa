@@ -15,7 +15,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
   redis:
     image: redis:7-alpine
     container_name: mini-wsa-redis
@@ -26,7 +25,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
   kafka:
     image: apache/kafka:3.9.1
     container_name: mini-wsa-kafka
@@ -54,7 +52,6 @@ services:
       timeout: 5s
       retries: 15
       start_period: 30s
-
   app:
     build: .
     container_name: mini-wsa-app
@@ -73,6 +70,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "8080:8080"
-
+    volumes:
+      - ./logs:/app/logs
 volumes:
   pg-data:
