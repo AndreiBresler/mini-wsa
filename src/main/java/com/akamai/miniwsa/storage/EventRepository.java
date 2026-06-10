@@ -1,41 +1,41 @@
 package com.akamai.miniwsa.storage;
 
+import com.akamai.miniwsa.domain.Action;
+import com.akamai.miniwsa.domain.Category;
 import com.akamai.miniwsa.domain.EnrichedEvent;
 import com.akamai.miniwsa.domain.GeoLocation;
 import com.akamai.miniwsa.domain.Rule;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Facade over {@link EventJpaRepository}. Maps the immutable
- * {@link EnrichedEvent} domain record to the mutable {@link EventEntity}
+ * Facade over {@link EventJpaRepository}. Maps between the immutable
+ * {@link EnrichedEvent} domain record and the mutable {@link EventEntity}
  * JPA bean. Services depend on this facade, never on JPA types directly.
  *
- * <h2>Idempotency model</h2>
+ * <p>Dynamic filtering for {@code findSamples} is built with a JPA
+ * {@link Specification} so the WHERE clause contains only the predicates
+ * the caller supplied. The earlier {@code :param IS NULL OR e.field = :param}
+ * pattern fails on Postgres for several JDBC types because Postgres cannot
+ * infer the data type of a parameter that appears only inside {@code IS NULL}.
  *
- * <p>The authoritative idempotency guarantee is the {@code UNIQUE(event_id)}
- * constraint in the database. Three layers reinforce it:
- *
- * <ol>
- *   <li><b>Kafka partitioning by {@code clientIp}.</b> Same client (and
- *       therefore same {@code eventId}) routes to the same partition,
- *       which is serviced by a single consumer thread. Redelivery after
- *       a consumer crash is sequential, not concurrent.
- *   <li><b>Manual ack only after a successful save.</b> If the save throws,
- *       the offset is not committed and Kafka redelivers; the redelivered
- *       attempt sees the unique-constraint violation and returns false.
- *   <li><b>{@code DataIntegrityViolationException} catch.</b> Cross-partition
- *       eventId collisions (operator error, not normal operation) are
- *       handled here without raising a noisy stack trace upstream.
- * </ol>
- *
- * <p>No {@code @Transactional} on this method: Spring Data's
- * {@code JpaRepository.save} runs in its own transaction, so a constraint
- * violation rolls back that transaction without leaving a rollback-only
- * marker on a wider scope.
+ * <p>See LLD for the idempotency model around {@link #upsert}.
  */
 @Repository
 public class EventRepository {
+
+    private static final String FIELD_CONFIG_ID = "configId";
+    private static final String FIELD_TIMESTAMP = "timestamp";
+    private static final String FIELD_RULE_CATEGORY = "ruleCategory";
+    private static final String FIELD_ACTION = "action";
 
     private final EventJpaRepository jpa;
 
@@ -43,10 +43,6 @@ public class EventRepository {
         this.jpa = jpa;
     }
 
-    /**
-     * Persists the enriched event. Returns {@code true} if inserted,
-     * {@code false} if an event with this {@code eventId} already exists.
-     */
     public boolean upsert(EnrichedEvent event) {
         try {
             jpa.save(toEntity(event));
@@ -54,6 +50,42 @@ public class EventRepository {
         } catch (DataIntegrityViolationException duplicate) {
             return false;
         }
+    }
+
+    public SamplesResult findSamples(Integer configId, Instant from, Instant to,
+                                     Category category, Action action, Pageable pageable) {
+        Specification<EventEntity> spec = buildSamplesSpecification(configId, from, to, category, action);
+        Page<EventEntity> page = jpa.findAll(spec, pageable);
+        List<EnrichedEvent> samples = page.getContent().stream()
+                .map(EventRepository::toDomain)
+                .toList();
+        return new SamplesResult(page.getTotalElements(), samples);
+    }
+
+    public record SamplesResult(long totalCount, List<EnrichedEvent> samples) {
+    }
+
+    private static Specification<EventEntity> buildSamplesSpecification(
+            Integer configId, Instant from, Instant to, Category category, Action action) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (configId != null) {
+                predicates.add(cb.equal(root.get(FIELD_CONFIG_ID), configId));
+            }
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.<Instant>get(FIELD_TIMESTAMP), from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThan(root.<Instant>get(FIELD_TIMESTAMP), to));
+            }
+            if (category != null) {
+                predicates.add(cb.equal(root.get(FIELD_RULE_CATEGORY), category));
+            }
+            if (action != null) {
+                predicates.add(cb.equal(root.get(FIELD_ACTION), action));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     private static EventEntity toEntity(EnrichedEvent e) {
@@ -85,5 +117,21 @@ public class EventRepository {
         entity.setAttackType(e.attackType());
         entity.setThreatScore(e.threatScore());
         return entity;
+    }
+
+    private static EnrichedEvent toDomain(EventEntity e) {
+        Rule rule = new Rule(e.getRuleId(), e.getRuleName(), e.getRuleMessage(),
+                e.getRuleSeverity(), e.getRuleCategory());
+        GeoLocation geo = (e.getGeoCountry() == null && e.getGeoCity() == null)
+                ? null
+                : new GeoLocation(e.getGeoCountry(), e.getGeoCity());
+        return new EnrichedEvent(
+                e.getEventId(), e.getTimestamp(), e.getReceivedAt(), e.getConfigId(),
+                e.getPolicyId(), e.getClientIp(), e.getHostname(), e.getPath(),
+                e.getMethod(), e.getStatusCode(), e.getUserAgent(),
+                rule, e.getAction(), geo,
+                e.getRequestSize(), e.getResponseSize(),
+                e.getAttackType(), e.getThreatScore()
+        );
     }
 }

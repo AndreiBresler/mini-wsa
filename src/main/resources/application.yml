@@ -61,6 +61,8 @@ miniwsa:
     repeat-offender-grace-seconds: 60
   stats:
     top-limit: 10
+  samples:
+    max-limit: 100
 
 server:
   port: 8080

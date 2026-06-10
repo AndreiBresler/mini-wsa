@@ -7,10 +7,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -41,6 +41,18 @@ public class GlobalExceptionHandler {
                     List.of(new FieldError(field, "invalid value: " + ife.getValue())));
         }
         return badRequest("Malformed request body", List.of());
+    }
+
+    /**
+     * Triggered when a query parameter can't be coerced — e.g. {@code limit=abc}
+     * to {@code int}, or {@code category=SCANNER} to {@code Category} enum.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleParamMismatch(MethodArgumentTypeMismatchException ex) {
+        String field = ex.getName();
+        Object value = ex.getValue();
+        return badRequest("Invalid query parameter",
+                List.of(new FieldError(field, "invalid value: " + value)));
     }
 
     private ResponseEntity<ApiError> badRequest(String error, List<FieldError> details) {
