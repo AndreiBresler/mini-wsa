@@ -49,6 +49,79 @@ docker compose up --build       # full stack on http://localhost:8080
 | `POST /v1/dev/generate`        | Run a scenario through the public ingest endpoint. Seed-reproducible.   |
 | `GET  /actuator/health`        | Liveness.                                                               |
 
+## Using the data generator
+
+The generator lives under `/v1/dev` and is active only when the `dev` or `all` profile is on — so `docker compose up` exposes it for demos, the production `query`/`ingest`/`consumer` deployments do not.
+
+### List available scenarios
+
+```bash
+curl http://localhost:8080/v1/dev/scenarios
+```
+
+### Generate events
+
+```bash
+# Minimal — pick a scenario, defaults for everything else
+curl -X POST 'http://localhost:8080/v1/dev/generate?scenario=single-targeted-attack'
+
+# Reproducible — same seed always produces identical events
+curl -X POST 'http://localhost:8080/v1/dev/generate?scenario=multi-vector-incident&seed=42'
+
+# Override the configId tagged onto every event (default 14227)
+curl -X POST 'http://localhost:8080/v1/dev/generate?scenario=slow-burn&configId=99999&seed=1'
+
+# Send as JSON-array batches via the batch ingest path
+curl -X POST 'http://localhost:8080/v1/dev/generate?scenario=quiet-bot-day&batching=true&batchSize=20'
+```
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `scenario` | required | One of the names listed by `/v1/dev/scenarios` |
+| `configId` | `14227` | Tagged onto every generated event |
+| `seed` | random | Fix it for byte-identical replays |
+| `batching` | `false` | `true` = POST events as JSON arrays |
+| `batchSize` | `50` | Batch size when `batching=true` |
+
+The generator does **not** insert into the database directly — it POSTs events to the public `/v1/events/ingest` endpoint, so every generated event takes the same path as real traffic (validation → Kafka → consumer → enrichment → Postgres → Redis). That's also what makes the generator useful as an end-to-end smoke test: a successful `generate` proves the whole pipeline works.
+
+### Typical demo loop
+
+```bash
+curl -X POST 'http://localhost:8080/v1/dev/generate?scenario=multi-vector-incident&seed=42'
+sleep 5   # let the Kafka consumer drain
+curl 'http://localhost:8080/v1/stats/summary' | jq
+curl 'http://localhost:8080/v1/events/samples?limit=10' | jq
+```
+
+### Editing or adding scenarios
+
+Scenarios are defined in **`src/main/resources/generator-scenarios.yml`**. Schema:
+
+```yaml
+scenarios:
+  - name: my-scenario                # required, unique
+    description: "what this proves"  # required, shown in /v1/dev/scenarios
+    count: 200                       # total events to generate
+    windowHours: 6                   # spread events across the last N hours
+    defaultBatching: false           # optional, default false
+    defaultBatchSize: 50             # optional, used when defaultBatching=true
+    waves: []                        # zero or more attack waves; see below
+```
+
+A **wave** injects clustered attack traffic on top of the baseline:
+
+```yaml
+waves:
+  - size: 15                         # number of events in the wave
+    durationSeconds: 30              # spread the wave across N seconds
+    category: INJECTION              # INJECTION | XSS | DATA_LEAKAGE | BOT | DOS | RATE_LIMIT | PROTOCOL_VIOLATION
+    targetPath: /api/v1/login        # optional — pins the wave to one path so topTargetedPaths picks it up
+    severityProfile: ESCALATING      # LOW | MEDIUM | HIGH | CRITICAL | MIXED | ESCALATING
+```
+
+After editing, restart the app (`docker compose restart app`) — scenarios are loaded once at startup. The four bundled scenarios (`quiet-bot-day`, `single-targeted-attack`, `multi-vector-incident`, `slow-burn`) cover the spec's stated invariants and the edge cases (repeat-offender threshold, slow-rate-just-inside-window).
+
 ## Design decisions
 
 ### ORM-only persistence — no SQL or JPQL strings
